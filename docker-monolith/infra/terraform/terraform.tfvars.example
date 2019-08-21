@@ -1,0 +1,4 @@
+project = "docker-250515"
+disk_image = "ubuntu-1604-lts"
+instance_count = 3
+public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...B7AVOnkODdRE1IhXSO0w6+FK3RKyUvxSDLgHEg335Cnnv appuser"

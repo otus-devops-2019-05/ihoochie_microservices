@@ -1,0 +1,13 @@
+---
+- hosts: all
+  become: true
+
+  tasks:
+    - name: Run container
+      docker_container:
+        name: reddit
+        image: ilyahoochie/otus-reddit:1.0
+        state: started
+        ports:
+         - "9292:9292"
+        detach: yes
