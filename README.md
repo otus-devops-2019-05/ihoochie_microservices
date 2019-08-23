@@ -1,14 +1,18 @@
 # ihoochie_microservices [![Build Status](https://travis-ci.com/otus-devops-2019-05/ihoochie_microservices.svg?branch=master)](https://travis-ci.com/otus-devops-2019-05/ihoochie_microservices)
 
-[ДЗ №12 Технология контейнеризации. Введение в Docker](#дз-12-технология-контейнеризации-введение-в-docker)
+[ДЗ №12: Технология контейнеризации. Введение в Docker](#дз-12-технология-контейнеризации-введение-в-docker)
 * [Docker-образы и контейнеры](#docker-образы-и-контейнеры)
 * [Задание со * 1](#задание-со-звездочкой-1-отличие-образа-от-контейнера)
 * [Docker hub](#docker-hub)
 * [Задание со * 2](#задание-со-звездочкой-2-создание-инстансов-с-утавноленным-докером-и-запущенным-контейнером-с-приложением)
 
+[ДЗ №13: Docker-образы. Микросервисы](#дз-13-docker-образы-микросервисы)
+* [Приложение в микросервисной архитектуре](#приложение-в-микросервисной-архитектуре)
+* [Задание со * 1](#задание-со-звездочкой-1-запуск-контейнеров-с-другими-сетевыми-алиасами)
+* [Оптимизация образов](#оптимизация-образов)
 
 
-#### ДЗ №12 Технология контейнеризации. Введение в Docker
+#### ДЗ №12: Технология контейнеризации. Введение в Docker
 
 ##### Docker-образы и контейнеры
 
@@ -39,9 +43,9 @@
    --google-zone europe-west1-b \
    docker-host
   ```
- * Переключение на удаленный хост
+* Переключение на удаленный хост
   ```
-   $ eval $(docker-machine env docker-host)
+  $ eval $(docker-machine env docker-host)
   ```
 * Проверить с каким докер-демоном работаем
   ```
@@ -54,7 +58,7 @@
   $ docker build -t reddit:latest .
   ```
 
-* Открыти доступупа к порту 9292
+* Открытие доступупа к порту 9292
   ```
   $ gcloud compute firewall-rules create reddit-app \
    --allow tcp:9292 \
@@ -92,3 +96,152 @@
   ```
   $ packer build -var-file=variables.json app.json
   ```
+
+#### ДЗ №13: Docker-образы. Микросервисы
+
+##### Приложение в микросервисной архитектуре
+
+Создаем инструкции для создания образов:
+
+* ./post-py/Dockerfile 
+  ```
+  FROM python:3.6.0-alpine
+
+  RUN apk add --update gcc python python-dev py-pip build-base
+
+  WORKDIR /app
+  ADD . /app
+
+  RUN pip install -r /app/requirements.txt
+
+  ENV POST_DATABASE_HOST post_db
+  ENV POST_DATABASE posts
+
+  ENTRYPOINT ["python3", "post_app.py"]
+  ```
+
+* ./comment/Dockerfile
+  ```
+  FROM ruby:2.2
+  RUN apt-get update -qq && apt-get install -y build-essential
+
+  ENV APP_HOME /app
+  RUN mkdir $APP_HOME
+  WORKDIR $APP_HOME
+
+  ADD Gemfile* $APP_HOME/
+  RUN bundle install
+  ADD . $APP_HOME
+
+  ENV COMMENT_DATABASE_HOST comment_db
+  ENV COMMENT_DATABASE comments
+
+  CMD ["puma"]
+  ```
+
+* ./ui/Dockerfile
+  ```
+    FROM ruby:2.2
+    RUN apt-get update -qq && apt-get install -y build-essential
+
+    ENV APP_HOME /app
+    RUN mkdir $APP_HOME
+
+    WORKDIR $APP_HOME
+    ADD Gemfile* $APP_HOME/
+    RUN bundle install
+    ADD . $APP_HOME
+
+    ENV POST_SERVICE_HOST post
+    ENV POST_SERVICE_PORT 5000
+    ENV COMMENT_SERVICE_HOST comment
+    ENV COMMENT_SERVICE_PORT 9292
+
+    CMD ["puma"]
+  ```
+
+* Создания образов, на основании Dockerfiles для микросервисов в директории src
+  ```
+  $ eval $(docker-machine env docker-host)
+  $ docker build -t ilyahoochie/post:1.0 ./post-py
+  $ docker build -t ilyahoochie/comment:1.0 ./comment
+  $ docker build -t ilyahoochie/ui:1.0 ./ui
+  ```
+
+* Создание сети:
+  ```
+  $ docker network create reddit
+  ```
+
+* Запуск контейнеров из созданных образов
+  ```
+  $ docker run -d --network=reddit --network-alias=post_db --network-alias=comment_db mongo:latest
+  $ docker run -d --network=reddit --network-alias=post ilyahoochie/post:1.0
+  $ docker run -d --network=reddit --network-alias=comment ilyahoochie/comment:1.0
+  $ docker run -d --network=reddit -p 9292:9292 ilyahoochie/ui:1.0
+  ```
+
+##### Задание со звездочкой 1: Запуск контейнеров с другими сетевыми алиасами
+
+* Останавливаем контейнеры
+  ```
+  $ docker kill $(docker ps -q)
+  ```
+
+* Запускаем с новыми алиасами
+  ```
+  $ docker run -d --network=reddit --network-alias=post_db_new --network-alias=comment_db_new mongo:latest
+  $ docker run -d --network=reddit --network-alias=post_new --env POST_DATABASE_HOST=post_db_new ilyahoochie/post:1.0
+  $ docker run -d --network=reddit --network-alias=comment_new --env COMMENT_DATABASE_HOST=comment_db_new ilyahoochie/comment:1.0
+  $ docker run -d --network=reddit -p 9292:9292 --env POST_SERVICE_HOST=post_new --env COMMENT_SERVICE_HOST=comment_new ilyahoochie/ui:1.0
+  ```
+* Проверяем приложение - создание остов и комментариев работает.
+
+##### Оптимизация образов
+
+* Меняем содержимое  ./ui/Dockerfile
+  ```
+  FROM ubuntu:16.04
+  RUN apt-get update \
+      && apt-get install -y ruby-full ruby-dev build-essential \
+      && gem install bundler --no-ri --no-rdoc
+
+  ENV APP_HOME /app
+  RUN mkdir $APP_HOME
+
+  WORKDIR $APP_HOME
+  ADD Gemfile* $APP_HOME/
+  RUN bundle install
+  ADD . $APP_HOME
+
+  ENV POST_SERVICE_HOST post
+  ENV POST_SERVICE_PORT 5000
+  ENV COMMENT_SERVICE_HOST comment
+  ENV COMMENT_SERVICE_PORT 9292
+
+  CMD ["puma"]
+  ```
+
+* Запускаем новые копии контейнеров
+  ```
+  $ docker kill $(docker ps -q)
+  $ docker run -d --network=reddit --network-alias=post_db --network-alias=comment_db mongo:latest
+  $ docker run -d --network=reddit --network-alias=post ilyahoochie/post:1.0
+  $ docker run -d --network=reddit --network-alias=comment ilyahoochie/comment:1.0
+  $ docker run -d --network=reddit -p 9292:9292 ilyahoochie/ui:2.0
+  ```
+* С оставновкой контенеров данные потерялись.
+
+* Добавляем volume и подключаем его к контейнеру с mongo
+  ```
+  $ docker volume create reddit_db
+  ```
+  ```
+  $ docker kill $(docker ps -q)
+  $ docker run -d --network=reddit --network-alias=post_db --network-alias=comment_db -v reddit_db:/data/db mongo:latest
+  $ docker run -d --network=reddit --network-alias=post ilyahoochie/post:1.0
+  $ docker run -d --network=reddit --network-alias=comment ilyahoochie/comment:1.0
+  $ docker run -d --network=reddit -p 9292:9292 ilyahoochie/ui:2.0
+  ```
+
+* Перезапускаем контейнеры - ранее оставленный пост оставлся на месте
