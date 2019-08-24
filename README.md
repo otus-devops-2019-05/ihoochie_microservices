@@ -329,4 +329,3 @@
   ```
   $ docker-compose -p reddit up -d
   ```
-  
