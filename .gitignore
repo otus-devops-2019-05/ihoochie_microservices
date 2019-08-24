@@ -8,11 +8,4 @@ variables.json
 jdauphant.nginx
 ansible/venv/
 *.yamllint
-
-
-# Vagrant & molecule
-.vagrant/
-*.pyc
-.molecule
-.cache
-.pytest_cache
+*.env
