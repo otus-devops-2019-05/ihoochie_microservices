@@ -11,6 +11,10 @@
 * [Задание со * 1](#задание-со-звездочкой-1-запуск-контейнеров-с-другими-сетевыми-алиасами)
 * [Оптимизация образов](#оптимизация-образов)
 
+[ДЗ №14: Docker: сети, docker-compose](#дз-14-docker-сети-docker-compose)
+* [Работа с сетью в Docker](#работа-с-сетью-в-docker)
+* [Docker-compose](#docker-compose)
+
 
 #### ДЗ №12: Технология контейнеризации. Введение в Docker
 
@@ -245,3 +249,83 @@
   ```
 
 * Перезапускаем контейнеры - ранее оставленный пост оставлся на месте
+
+#### ДЗ №14: Docker: сети, docker-compose
+
+##### Работа с сетью в Docker
+
+* Контейнер с использованием none-драйвера
+  ```
+  $ docker run -ti --rm --network none joffotron/docker-net-tools -c ifconfig 
+  ```
+* Контейнер с использованием host-драйвера
+  ```
+  $ docker run -ti --rm --network host joffotron/docker-net-tools -c ifconfig 
+  ```
+* Контейнер с использованием bridge-драйвера
+
+* Создание bridge-сети (дефолтный тип драйвера)
+  ```
+  $ docker network create reddit --driver bridge 
+  ```
+* Запуск проекта. Контейнеры ссылаются друг на друга по dns именам, прописанным в ENV-переменных в Dockerfile.
+  ```
+  $ docker run -d --network=reddit --network-alias=post_db --network-alias=comment_db mongo:latest
+  $ docker run -d --network=reddit --network-alias=post ilyahoochie/post:1.0
+  $ docker run -d --network=reddit --network-alias=comment ilyahoochie/comment:1.0
+  $ docker run -d --network=reddit -p 9292:9292 ilyahoochie/ui:1.0
+  ```
+* Запустим проект в двух  bridge сетях
+  ```
+  $ docker kill $(docker ps -q)
+  ```
+* Создаем сети
+  ```
+  $ docker network create back_net --subnet=10.0.2.0/24
+  $ docker network create front_net --subnet=10.0.1.0/24
+  ```
+* Запуск контейнеров
+  ```
+  $ docker run -d --network=front_net -p 9292:9292 --name ui ilyahoochie/ui:1.0
+  $ docker run -d --network=back_net --name comment ilyahoochie/comment:1.0
+  $ docker run -d --network=back_net --name post ilyahoochie/post:1.0
+  $ docker run -d --network=back_net --name mongo_db  --network-alias=post_db --network-alias=comment_db mongo:latest 
+  ```
+* Docker при инициализации контейнера может подключить к нему только 1 сеть. При этом контейнеры из соседних сетей не будут доступны как в DNS, так и для взаимодействия по сети. Поэтому нужно поместить контейнеры post и comment в обе сети.
+  ```
+  $ docker network connect front_net post
+  $ docker network connect front_net comment
+  ```
+  
+##### Docker-compose
+
+* Установка 
+  ```
+  $ pip install docker-compose
+  ```
+* Описание проекта добавляем в src/docker-compose.yml
+
+* Добавляем переменную окружения
+  ```
+  $ export USERNAME=ilyahoochie
+  ```
+* Останавливаем старые контейнеры и запускаем новые при помощи docker-compose
+  ```
+  $ docker kill $(docker ps -q) 
+  $ docker-compose up -d
+  $ docker-compose ps
+  ```
+
+* Изменен src/docker-compose.yml под кейс с множеством сетей, сетевых алиасов
+
+* Параметризированы переменные, значения внесены в файл .env
+
+* Базовое имя проекта устанавливается равным текущей директории, изменить это поведение можно через параметр -p
+  ```
+    -p, --project-name NAME     Specify an alternate project name
+                                (default: directory name)
+  ```
+* Пример
+  ```
+  $ docker-compose -p reddit up -d
+  ```
