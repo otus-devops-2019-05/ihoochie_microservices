@@ -12,7 +12,6 @@ ansible/venv/
 
 # Vagrant & molecule
 .vagrant/
-*.log
 *.pyc
 .molecule
 .cache
