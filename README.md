@@ -275,11 +275,8 @@
   $ docker run -d --network=reddit --network-alias=comment ilyahoochie/comment:1.0
   $ docker run -d --network=reddit -p 9292:9292 ilyahoochie/ui:1.0
   ```
-* Запустим проект в двух  bridge сетях
-  ```
-  $ docker kill $(docker ps -q)
-  ```
-* Создаем сети
+
+* Запустим проект в двух  bridge сетях. Создаем сети:
   ```
   $ docker network create back_net --subnet=10.0.2.0/24
   $ docker network create front_net --subnet=10.0.1.0/24
