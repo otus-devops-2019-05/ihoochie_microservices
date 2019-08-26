@@ -15,6 +15,10 @@
 * [Работа с сетью в Docker](#работа-с-сетью-в-docker)
 * [Docker-compose](#docker-compose)
 
+[ДЗ №15: Устройство Gitlab CI. Построение процесса непрерывной поставки](#дз-15-устройство-gitlab-ci-построение-процесса-непрерывной-поставки)
+* [Инсталляция Gitlab CI](#инсталляция-gitlab-ci)
+* [Разделение на окружения](#разделение-на-окружения)
+
 
 #### ДЗ №12: Технология контейнеризации. Введение в Docker
 
@@ -275,8 +279,11 @@
   $ docker run -d --network=reddit --network-alias=comment ilyahoochie/comment:1.0
   $ docker run -d --network=reddit -p 9292:9292 ilyahoochie/ui:1.0
   ```
-
-* Запустим проект в двух  bridge сетях. Создаем сети:
+* Запустим проект в двух  bridge сетях
+  ```
+  $ docker kill $(docker ps -q)
+  ```
+* Создаем сети
   ```
   $ docker network create back_net --subnet=10.0.2.0/24
   $ docker network create front_net --subnet=10.0.1.0/24
@@ -326,3 +333,109 @@
   ```
   $ docker-compose -p reddit up -d
   ```
+#### ДЗ №15: Устройство Gitlab CI. Построение процесса непрерывной поставки
+
+##### Инсталляция Gitlab CI
+
+* Новую виртуальную машину в GCP создадим при помощи Terraform. Конфигуация описана в gitlab-ci/terraform.
+
+* Docker и Docker-compose на созданных хост установим при помощи Ansible. Конфиграци описана в gitlab-ci/ansible.
+
+* Подготовка окружения на новом хосте
+  ```
+  $ mkdir -p /srv/gitlab/config /srv/gitlab/data /srv/gitlab/logs
+  $ cd /srv/gitlab/
+  $ touch docker-compose.yml
+  ```
+* Заполняем docker-compose.yml по шаблону https://docs.gitlab.com/omnibus/docker/README.html#install-gitlab-using-docker-compose и устаавливаем github-ci на сервер
+  ```
+  /srv/gitlab$ docker-compose up -d
+  ```
+* Зоздаем группу и проект
+
+* Добавляем remote в репозиторий
+  ```
+  $ git remote add gitlab http://35.205.116.141/homework/example.git 
+  $ git push gitlab gitlab-ci-1
+  ```
+* Добавляем файл .gitlab-ci.yml в репозиторий для определения CI/CD pipline
+  ```
+  $ git add .gitlab-ci.yml
+  $ git commit -m 'add pipeline definition'
+  $ git push gitlab gitlab-ci-1
+  ```
+
+* Регистрируем и запускаем Runner
+
+* На GCE хосте выполняем
+  ```
+  $ docker run -d --name gitlab-runner --restart always \
+  -v /srv/gitlab-runner/config:/etc/gitlab-runner \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  gitlab/gitlab-runner:latest
+  ```
+
+* Регистрируем Runner
+  ```
+  $ docker exec -it gitlab-runner gitlab-runner register --run-untagged --locked=false
+  ```
+* Добавим исходный код reddit в репозиторий
+  ```
+  $ git clone https://github.com/express42/reddit.git && rm -rf ./reddit/.git
+  $ git add reddit/
+  $ git commit -m “Add reddit app”
+  $ git push gitlab gitlab-ci-1
+  ```
+* Меняем описание пайплайна в .gitlab-ci.yml для тестирования приложения
+
+* Добавляем файл теста simpletest.rb
+
+* Добавляем библиотеку rack-test в reddit/Gemfile
+
+
+##### Разделение на окружения
+
+* Изменяем .gitlab-ci.yml  для dev окружения
+  ```
+  deploy_dev_job:
+    stage: review
+    script:
+      - echo 'Deploy'
+    environment:
+      name: dev
+      url: http://dev.example.com
+  ```
+
+* Изменяем .gitlab-ci.yml  для stg и prod окружений
+  ```
+  staging:
+    stage: stage
+    when: manual
+    only:
+      - /^\d+\.\d+\.\d+/ 
+    script:
+      - echo 'Deploy'
+    environment:
+      name: stage
+      url: https://beta.example.com
+
+  production:
+    stage: production
+    when: manual
+    only:
+      - /^\d+\.\d+\.\d+/ 
+    script:
+      - echo 'Deploy'
+    environment:
+      name: production
+      url: https://example.com
+  ```
+
+* Изменение, помеченное тэгом в git запустит полный пайплайн
+  ```
+  $ git commit -a -m ‘#4 add logout button to profile page’
+  $ git tag 2.4.10
+  $ git push gitlab gitlab-ci-1 --tags
+  ```
+* Динамическое окружение задано при помощи переменных в .gitlab-ci.yml. На каждую ветку в git отличную от master
+Gitlab CI будет определять новое окружение.
